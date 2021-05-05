@@ -1,59 +1,92 @@
 import React, { useState, useEffect } from 'react'
 import './App.css'
-import placeholderImg from './placeholder.png'
-import { ReactComponent as ChevronLeft } from './chevron-left.svg'
-import { ReactComponent as ChevronRight } from './chevron-right.svg'
+import DisableOverlay from './components/DisableOverlay'
+import SearchBar from './components/SearchBar'
+import SearchResultArea from './components/SearchResultArea'
 
 function App() {
   const [searchResult, setSearchResult] = useState()
+  const [searchInput, setSearchInput] = useState("");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [canChangePage, setCanChangePage] = useState(true);
+  const [page, setPage] = useState(1);
 
-  useEffect(() => {
-    const search = async () => {
+  const makeSearch = async () => {
+    if(searchInput !== "") {
+      setLoading(true);
       const response = await fetch(
-        'http://www.omdbapi.com/?apikey=a461e386&s=king',
-      )
+        `http://www.omdbapi.com/?apikey=a461e386&s=${searchInput}&page=${page}`,
+      );
+  
+      const data = await response.json();
 
-      const data = await response.json()
+      if(data.Response === "True")
+      {
+        setSearchResult([]);
+        setSearchResult(data.Search);
+        setErrorMessage("");
+        setCanChangePage(true);
+      } else {
+        switch (data.Error) {
+          case "Too many results.":
+            setErrorMessage(`Well, that search seems to be too ambiguous... Try to be more specific`);
+            setSearchResult([]);
+            setCanChangePage(false);
+            break;
+          case "Movie not found!":
+            setErrorMessage(`We can't find any movie with that search query :(`);
+            setSearchResult([]);
+            setCanChangePage(false);
+            break;
+          default:
+            setErrorMessage(`Oooops! Something nasty happened... Please try again later`);
+            setSearchResult([]);
+            setCanChangePage(false);
+            break;
+        }
+      }
+      setLoading(false);
+    } 
+  }
 
-      if (!searchResult) {
-        setSearchResult(data)
+  const handleSearch = async (resetQuery, increasePage) => {
+    if(resetQuery) {
+      if(page === 1) {
+        makeSearch();
+      } else {
+        setPage(1);
+      }
+    } else {
+      if(increasePage) {
+        setPage(page+1);
+      } else {
+        setPage(Math.max(1, page-1));
       }
     }
+  }
 
-    search()
-  })
+  useEffect(() => {
+    makeSearch();
+  }, [page]);
 
   return (
     <div className="App">
-      <div className="search">
-        <input type="text" placeholder="Search..." />
-        <button>Search</button>
-      </div>
+      {loading ? <DisableOverlay /> : ""}
+      <SearchBar
+        handleSearch={handleSearch}
+        searchInput={searchInput}
+        setSearchInput={setSearchInput}
+        errorMessage={errorMessage}
+      />
       {!searchResult ? (
-        <p>No results yet</p>
+        <p className="searchPlaceholder">No results yet</p>
       ) : (
-        <div className="search-results">
-          <div className="chevron">
-            <ChevronLeft />
-          </div>
-          <div className="search-results-list">
-            {searchResult.Search.map(result => (
-              <div key={result.imdbID} className="search-item">
-                <img
-                  src={result.Poster === 'N/A' ? placeholderImg : result.Poster}
-                  alt="poster"
-                />
-                <div className="search-item-data">
-                  <div className="title">{result.Title}</div>
-                  <div className="meta">{`${result.Type} | ${result.Year}`}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="chevron">
-            <ChevronRight />
-          </div>
-        </div>
+        <SearchResultArea 
+          canChangePage={canChangePage}
+          handleSearch={handleSearch}
+          searchResult={searchResult}
+        />
       )}
     </div>
   )
